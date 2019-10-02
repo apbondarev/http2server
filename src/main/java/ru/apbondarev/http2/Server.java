@@ -45,7 +45,7 @@ public class Server extends AbstractVerticle {
     }
 
     private static void runExample(Class<?> clazz) {
-        runExample("http2server/", clazz, new VertxOptions().setClustered(false), null);
+        runExample("http2server/src/main/java/", clazz, new VertxOptions().setClustered(false), null);
     }
 
     private static void runExample(String exampleDir, Class<?> clazz, VertxOptions options, DeploymentOptions deploymentOptions) {
