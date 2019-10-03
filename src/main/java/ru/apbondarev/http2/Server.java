@@ -15,7 +15,12 @@ import io.vertx.ext.web.Router;
 public class Server extends AbstractVerticle {
 
     public static void main(String[] args) {
-        runExample(Server.class);
+        runServer(
+                "http2server/src/main/java/" + Server.class.getPackage().getName().replace(".", "/"),
+                Server.class.getName(),
+                new VertxOptions().setClustered(false),
+                null
+        );
     }
 
     @Override
@@ -44,15 +49,12 @@ public class Server extends AbstractVerticle {
                 .listen(8443);
     }
 
-    private static void runExample(Class<?> clazz) {
-        runExample("http2server/src/main/java/", clazz, new VertxOptions().setClustered(false), null);
-    }
-
-    private static void runExample(String exampleDir, Class<?> clazz, VertxOptions options, DeploymentOptions deploymentOptions) {
-        runExample(exampleDir + clazz.getPackage().getName().replace(".", "/"), clazz.getName(), options, deploymentOptions);
-    }
-
-    private static void runExample(String exampleDir, String verticleID, VertxOptions options, DeploymentOptions deploymentOptions) {
+    private static void runServer(
+            String currentDir,
+            String verticleID,
+            VertxOptions options,
+            DeploymentOptions deploymentOptions
+    ) {
         if (options == null) {
             // Default parameter
             options = new VertxOptions();
@@ -64,14 +66,14 @@ public class Server extends AbstractVerticle {
         try {
             // We need to use the canonical file. Without the file name is .
             File current = new File(".").getCanonicalFile();
-            if (exampleDir.startsWith(current.getName()) && !exampleDir.equals(current.getName())) {
-                exampleDir = exampleDir.substring(current.getName().length() + 1);
+            if (currentDir.startsWith(current.getName()) && !currentDir.equals(current.getName())) {
+                currentDir = currentDir.substring(current.getName().length() + 1);
             }
         } catch (IOException e) {
             // Ignore it.
         }
 
-        System.setProperty("vertx.cwd", exampleDir);
+        System.setProperty("vertx.cwd", currentDir);
         Consumer<Vertx> runner = vertx -> {
             try {
                 if (deploymentOptions != null) {
