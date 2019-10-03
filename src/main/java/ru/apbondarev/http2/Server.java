@@ -2,23 +2,35 @@ package ru.apbondarev.http2;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.DeploymentOptions;
+import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServerOptions;
+import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.net.PemKeyCertOptions;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.RoutingContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Server extends AbstractVerticle {
 
+    private static final Logger log = LoggerFactory.getLogger(Server.class);
+
     public static void main(String[] args) {
+        VertxOptions vertxOptions = new VertxOptions();
+        vertxOptions.getEventBusOptions().setClustered(false);
         runServer(
                 "http2server/src/main/java/" + Server.class.getPackage().getName().replace(".", "/"),
                 Server.class.getName(),
-                new VertxOptions().setClustered(false),
+                vertxOptions,
                 null
         );
     }
@@ -35,11 +47,30 @@ public class Server extends AbstractVerticle {
                     .end(image.generateHTML(16));
         });
 
+        router.get("/img").handler(ctx -> {
+            ctx.response()
+                    .putHeader("Content-Type", "image/png")
+                    .end(image.getData());
+        });
+
         router.get("/img/:x/:y").handler(ctx -> {
             ctx.response()
                     .putHeader("Content-Type", "image/png")
                     .end(image.getPixel(Integer.parseInt(ctx.pathParam("x")), Integer.parseInt(ctx.pathParam("y"))));
         });
+
+        router.get("/hello").handler(timing(ctx -> {
+            List<String> names = ctx.queryParam("name");
+            HttpServerResponse response = ctx.response()
+                    .putHeader("Content-Type", "text/plain");
+            Buffer buffer = Buffer.buffer().appendString("Hello");
+            if (names != null && !names.isEmpty()) {
+                buffer.appendString(", ");
+                buffer.appendString(String.join(", ", names));
+            }
+            buffer.appendString("!");
+            response.end(buffer);
+        }));
 
         vertx.createHttpServer(
                 new HttpServerOptions()
@@ -47,6 +78,15 @@ public class Server extends AbstractVerticle {
                         .setUseAlpn(true)
                         .setPemKeyCertOptions(new PemKeyCertOptions().setKeyPath("tls/server-key.pem").setCertPath("tls/server-cert.pem"))).requestHandler(router)
                 .listen(8443);
+    }
+
+    private static Handler<RoutingContext> timing(Handler<RoutingContext> handler) {
+        return ctx -> {
+            long timeStart = System.nanoTime();
+            handler.handle(ctx);
+            long timeEnd = System.nanoTime();
+            log.info("{} µs", TimeUnit.NANOSECONDS.toMicros(timeEnd - timeStart));
+        };
     }
 
     private static void runServer(
@@ -85,7 +125,7 @@ public class Server extends AbstractVerticle {
                 t.printStackTrace();
             }
         };
-        if (options.isClustered()) {
+        if (options.getEventBusOptions().isClustered()) {
             Vertx.clusteredVertx(options, res -> {
                 if (res.succeeded()) {
                     Vertx vertx = res.result();
