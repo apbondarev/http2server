@@ -21,6 +21,8 @@ public class Image {
     private final int height;
     private final int[] data;
 
+    private final Buffer imageBuffer;
+
     public Image(Vertx vertx, String name) {
         try {
             final BufferedImage raster = ImageIO.read(((VertxInternal) vertx).resolveFile(name));
@@ -28,6 +30,8 @@ public class Image {
             height = raster.getHeight();
 
             data = raster.getRGB(0, 0, width, height, null, 0, width);
+
+            imageBuffer = toPngBuffer(raster);
 
             for (int pixel : data)
                 if (!colorMap.containsKey(pixel)) {
@@ -37,16 +41,19 @@ public class Image {
                     g2.setPaint(new Color(pixel, true));
                     g2.fillRect(0, 0, 1, 1);
 
-                    ByteArrayOutputStream out = new ByteArrayOutputStream();
-                    ImageIO.write(offlineImage, "PNG", out);
-
-                    colorMap.put(pixel, Buffer.buffer().appendBytes(out.toByteArray()));
-                    out.close();
+                    colorMap.put(pixel, toPngBuffer(offlineImage));
                     g2.dispose();
                 }
 
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private static Buffer toPngBuffer(BufferedImage raster) throws IOException {
+        try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            ImageIO.write(raster, "PNG", out);
+            return Buffer.buffer().appendBytes(out.toByteArray());
         }
     }
 
@@ -81,5 +88,9 @@ public class Image {
 
     public Buffer getPixel(int x, int y) {
         return colorMap.get(data[y * width + x]);
+    }
+
+    public Buffer getData() {
+        return imageBuffer;
     }
 }
