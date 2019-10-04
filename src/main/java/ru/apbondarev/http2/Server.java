@@ -25,6 +25,7 @@ public class Server extends AbstractVerticle {
     private static final Logger log = LoggerFactory.getLogger(Server.class);
 
     public static void main(String[] args) {
+        log.info("[{}] Starting http2 server", Thread.currentThread().getName());
         VertxOptions vertxOptions = new VertxOptions();
         vertxOptions.getEventBusOptions().setClustered(false);
         runServer(
@@ -60,15 +61,17 @@ public class Server extends AbstractVerticle {
         });
 
         router.get("/hello").handler(timing(ctx -> {
-            List<String> names = ctx.queryParam("name");
             HttpServerResponse response = ctx.response()
                     .putHeader("Content-Type", "text/plain");
-            Buffer buffer = Buffer.buffer().appendString("Hello");
+            StringBuilder builder = new StringBuilder(50);
+            builder.append("Hello");
+            List<String> names = ctx.queryParam("name");
             if (names != null && !names.isEmpty()) {
-                buffer.appendString(", ");
-                buffer.appendString(String.join(", ", names));
+                builder.append(", ");
+                builder.append(String.join(", ", names));
             }
-            buffer.appendString("!");
+            builder.append('!');
+            Buffer buffer = Buffer.buffer(builder.toString());
             response.end(buffer);
         }));
 
@@ -85,7 +88,7 @@ public class Server extends AbstractVerticle {
             long timeStart = System.nanoTime();
             handler.handle(ctx);
             long timeEnd = System.nanoTime();
-            log.info("{} µs", TimeUnit.NANOSECONDS.toMicros(timeEnd - timeStart));
+            log.info("[{}] {} µs", Thread.currentThread().getName(), TimeUnit.NANOSECONDS.toMicros(timeEnd - timeStart));
         };
     }
 
