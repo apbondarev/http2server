@@ -3,6 +3,8 @@ package ru.apbondarev.http2;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -24,6 +26,8 @@ public class Server extends AbstractVerticle {
 
     private static final Logger log = LoggerFactory.getLogger(Server.class);
 
+    private final ConcurrentHashMap<Long, String> data = new ConcurrentHashMap<>();
+
     public static void main(String[] args) {
         log.info("[{}] Starting http2 server", Thread.currentThread().getName());
         VertxOptions vertxOptions = new VertxOptions();
@@ -39,6 +43,8 @@ public class Server extends AbstractVerticle {
     @Override
     public void start() throws Exception {
         Image image = new Image(vertx, "coin.png");
+
+        fillRandomData();
 
         Router router = Router.router(vertx);
 
@@ -60,7 +66,7 @@ public class Server extends AbstractVerticle {
                     .end(image.getPixel(Integer.parseInt(ctx.pathParam("x")), Integer.parseInt(ctx.pathParam("y"))));
         });
 
-        router.get("/hello").handler(timing(ctx -> {
+        router.get("/hello").handler(timing("hello", ctx -> {
             HttpServerResponse response = ctx.response()
                     .putHeader("Content-Type", "text/plain");
             StringBuilder builder = new StringBuilder(50);
@@ -75,6 +81,24 @@ public class Server extends AbstractVerticle {
             response.end(buffer);
         }));
 
+        router.get("/data/:key").handler(timing("get /data", ctx -> {
+            Long key = Long.valueOf(ctx.pathParam("key"));
+            String value = data.get(key);
+            Buffer buffer = Buffer.buffer(value);
+            HttpServerResponse response = ctx.response()
+                    .putHeader("Content-Type", "text/plain");
+            response.end(buffer);
+        }));
+
+        router.post("/data/:key").handler(timing("post /data", ctx -> {
+            Long key = Long.valueOf(ctx.pathParam("key"));
+            String value = ctx.getBodyAsString();
+            data.put(key, value);
+            HttpServerResponse response = ctx.response()
+                    .putHeader("Content-Type", "text/plain");
+            response.end();
+        }));
+
         vertx.createHttpServer(
                 new HttpServerOptions()
                         .setSsl(true)
@@ -83,12 +107,20 @@ public class Server extends AbstractVerticle {
                 .listen(8443);
     }
 
-    private static Handler<RoutingContext> timing(Handler<RoutingContext> handler) {
+    private void fillRandomData() {
+        for (int i = 0; i < 10_000; i++) {
+            long key = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
+            String value = Long.toHexString(ThreadLocalRandom.current().nextLong(Long.MAX_VALUE));
+            data.put(key, value);
+        }
+    }
+
+    private static Handler<RoutingContext> timing(String statName, Handler<RoutingContext> handler) {
         return ctx -> {
             long timeStart = System.nanoTime();
             handler.handle(ctx);
             long timeEnd = System.nanoTime();
-            log.info("[{}] {} µs", Thread.currentThread().getName(), TimeUnit.NANOSECONDS.toMicros(timeEnd - timeStart));
+            log.info("[{}] {} {} µs", Thread.currentThread().getName(), statName, TimeUnit.NANOSECONDS.toMicros(timeEnd - timeStart));
         };
     }
 
