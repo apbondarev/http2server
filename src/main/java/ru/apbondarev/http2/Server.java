@@ -3,8 +3,6 @@ package ru.apbondarev.http2;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -26,7 +24,7 @@ public class Server extends AbstractVerticle {
 
     private static final Logger log = LoggerFactory.getLogger(Server.class);
 
-    private final ConcurrentHashMap<Long, String> data = new ConcurrentHashMap<>();
+    private BottleneckData data;
 
     public static void main(String[] args) {
         log.info("[{}] Starting http2 server", Thread.currentThread().getName());
@@ -44,7 +42,7 @@ public class Server extends AbstractVerticle {
     public void start() throws Exception {
         Image image = new Image(vertx, "coin.png");
 
-        fillRandomData();
+        data = new BottleneckData(0, 1024 * 1024);
 
         Router router = Router.router(vertx);
 
@@ -81,17 +79,23 @@ public class Server extends AbstractVerticle {
             response.end(buffer);
         }));
 
-        router.get("/data/:key").handler(timing("get /data", ctx -> {
-            Long key = Long.valueOf(ctx.pathParam("key"));
+        router.get("/data/:key").blockingHandler(timing("get /data", ctx -> {
+            int key = Integer.parseInt(ctx.pathParam("key"));
             String value = data.get(key);
-            Buffer buffer = Buffer.buffer(value);
-            HttpServerResponse response = ctx.response()
-                    .putHeader("Content-Type", "text/plain");
-            response.end(buffer);
+            if (value == null) {
+                ctx.response()
+                        .setStatusCode(404)
+                        .end();
+            } else {
+                Buffer buffer = Buffer.buffer(value);
+                HttpServerResponse response = ctx.response()
+                        .putHeader("Content-Type", "text/plain");
+                response.end(buffer);
+            }
         }));
 
-        router.post("/data/:key").handler(timing("post /data", ctx -> {
-            Long key = Long.valueOf(ctx.pathParam("key"));
+        router.post("/data/:key").blockingHandler(timing("post /data", ctx -> {
+            int key = Integer.parseInt(ctx.pathParam("key"));
             String value = ctx.getBodyAsString();
             data.put(key, value);
             HttpServerResponse response = ctx.response()
@@ -105,14 +109,6 @@ public class Server extends AbstractVerticle {
                         .setUseAlpn(true)
                         .setPemKeyCertOptions(new PemKeyCertOptions().setKeyPath("tls/server-key.pem").setCertPath("tls/server-cert.pem"))).requestHandler(router)
                 .listen(8443);
-    }
-
-    private void fillRandomData() {
-        for (int i = 0; i < 10_000; i++) {
-            long key = ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
-            String value = Long.toHexString(ThreadLocalRandom.current().nextLong(Long.MAX_VALUE));
-            data.put(key, value);
-        }
     }
 
     private static Handler<RoutingContext> timing(String statName, Handler<RoutingContext> handler) {
